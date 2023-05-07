@@ -1,0 +1,33 @@
+------------------------------------------------------------------------
+FreeGEM/XM                                              Release 3.0beta4
+Source distribution                                       Build 20000406
+OBJWOSRC.TXT - Description of the two object files without source files.
+------------------------------------------------------------------------
+Copyright (C) Digital Research, Inc. 1985 - 1986.
+          (C) Caldera Thin Clients, Inc. 1999.
+          (C) FreeGEM Programmers, 2000.
+          This software is released under the GNU General Public License
+------------------------------------------------------------------------
+
+This directory (GDOS\OBJWOSRC) contains two object files for the GEM/XM
+GDOS/GEMVDI, for which the source code has been non forthcoming.  This
+is presumably due to corruption or loss before they were released under
+the GPL.  Because of this, I've copied them out of the main build
+directory in case they get deleted during a cleanup or somesuch.
+
+These two components are critical to the operation of the GDOS - one is
+likely to be the VDI itself, and the other is the code responsible for
+loading and executing the VDI (and possibly other applications).  The
+two equivalent files from the GEM/3, ViewMAX and FreeGEM VDIs do not
+appear to be simply interchangable.
+
+Also included in this directory are two files containing LINK86 output
+when the objects are linked without the rest of the FreeGEM/XM GDOS
+(showing the symbols these OBJs import from the other code), and when
+the remaining code is linked without these two files (showing which
+symbols these OBJs export to the rest of the GDOS).  More detailed
+information is contained within the object files themselves.
+
+Regards,
+Ben A L Jemmett
+6th April, 2000.

@@ -1,0 +1,83 @@
+------------------------------------------------------------------------
+FreeGEM/XM                                              Release 3.0beta4
+Source distribution                                       Build 20000406
+XMGEM.TXT - Information supplied with our original GEM/XM source/binary.
+------------------------------------------------------------------------
+Copyright (C) Digital Research, Inc. 1985 - 1986.
+          (C) Caldera Thin Clients, Inc. 1999.
+          (C) FreeGEM Programmers, 2000.
+          This software is released under the GNU General Public License
+------------------------------------------------------------------------
+
+This archive contains all that has currently been found of XMGEM
+There is source code for the main parts i.e. GEMVDI, GEM, DESKTOP,
+but there are no linker list files:- .INP files, although the batch
+files are here.  There appear to be some parts of the binaries missing
+and to run it properly you would need a utility to set up a ramdisk
+in expanded memory. [Please upload if anybody has one which can be
+added to the archive].
+
+If you get it running the Desktop reports itself as 3.13 the last published
+invocation, However the directory structure is strictly GEM 1, and you will
+need drivers from GEM 2, because of the missing bits you will have to load
+it by hand and use the keypad to move the mouse, (seven [pos ] is
+equivallent of mouse click) The GEM base files are larger than their
+equivallent from the released versions of GEM.  Tools used in the build
+include Lattice 2,14; Rasm86; Metaware HC 1.4; Link86 and RASM -(no suffix).
+
+Source code via courtesy of Gene Buckle
+Binaries via courtesy of Dylan Harris
+Picture and description below via courtesy of Alec Beanse
+
+Enjoy
+Chris Barnes
+
+From Alec
+
+"A while back another GEM user gave me a poor photocopy from a magazine or
+DR leaflet concerning GEM XM Desktop & Diary that was shortly to be
+released (1987). A copy of the text follows:
+
+GEM XM Desktop and Diary
+
+GEM XM Desktop allows you to run several applications at once. You
+can switch at will between them and even pass data from application
+to application. No longer need you finish one job before starting
+another.
+No more errors in typing the output of one programme as input to the
+next.
+Even for DOS applications that were not specially written for GEM.
+
+These new capabilities are in addition to the easy-to-use GEM Desktop
+functions of organising and displaying the contents of your discs.
+All commands use drop-down menus so need no memorizing. Discs and files
+are represented by icons which are unambiguous and easy to select,
+especially with a mouse.
+
+GEM XM Desktop is delivered complete with the indispensable GEM Diary
+which has alarm clock, calendar, diary and card index functions
+constantly available.
+
+Major features include:
+
+* Load up to ten applications simultaneously
+* Switch between applications at any time in any order
+* Cut and paste data between applications
+* Use RAM disc or expanded memory (if available)
+* Alarm clock, calendar, diary card index and calculator accessories
+
+GEM XM Desktop system requirements:
+
+* IBM PC or 100% compatible
+* 512k RAM - some features require more
+* Expanded memory, used as RAM disk, for even higher performance
+* Hard Disc
+* CGA, EGA or Hercules graphics or compatible
+* Logimouse, Mouse Systems or Microsoft mouse or compatible or
+  Summagraphics tablet (optional but highly recommended)
+
+NB: GEM XM available Q2 1987
+
+Has anyone heard of this or was it just wishful thinking on DRs part?
+
+"

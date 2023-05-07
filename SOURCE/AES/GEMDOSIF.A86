@@ -1,0 +1,840 @@
+;/*	GEMDOSIF.A86	4/18/84 - 08/14/85	Lee Jay Lorenzen	*/
+;
+;
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*                  Historical Copyright  
+;*	-------------------------------------------------------------
+;*	GEM Application Environment Services		  Version 3.0
+;*	Serial No.  XXXX-0000-654321		  All Rights Reserved
+;*	Copyright (C) 1986			Digital Research Inc.
+;*	-------------------------------------------------------------
+;*/
+;
+;
+	dseg
+;
+GEMENTRY equ	0efh
+;
+indos	db	0
+achar	db	0
+save_ss	dw	0
+save_sp	dw	0
+CMP_TICK dw	0
+ti_hicmp dw	0
+NUM_TICK dw	0
+ti_hinum dw	0
+;
+;
+	cseg
+	PUBLIC	cpmcod
+;	PUBLIC	cpmexec
+	PUBLIC	cxc33, cxm33, cxd33
+	PUBLIC	__DOS, __EXEC
+	PUBLIC	cli, sti
+	PUBLIC	takeerr, giveerr
+	PUBLIC	takecpm, givecpm
+	PUBLIC	retake
+	PUBLIC	setdsss
+	PUBLIC	supret
+	PUBLIC	far_call
+	PUBLIC	far_bcha
+	PUBLIC	far_mcha
+	PUBLIC	drawrat
+	PUBLIC  justretf
+	EXTRN	dsptch:near
+	EXTRN	forkq:near
+	EXTRN	super:near
+	EXTRN	nsuper:near
+	EXTRN	tchange:near
+	EXTRN	bchange:near
+	EXTRN	mchange:near
+	EXTRN	b_delay:near
+	EXTRN	b_click:near
+	EXTRN	eralert:near
+;
+;
+	dseg
+	public eintstk
+	PUBLIC	CMP_TICK, NUM_TICK
+	PUBLIC	drwaddr
+	PUBLIC	tikaddr
+	PUBLIC	tiksav
+	EXTRN	xrat:word, yrat:word
+	EXTRN	rlr:word
+	EXTRN	gl_bdely:word
+	EXTRN	gl_play:word
+	EXTRN	DOS_AX:WORD, DOS_BX:WORD, DOS_CX:WORD, DOS_DX:WORD
+	EXTRN	DOS_DS:WORD, DOS_ES:WORD, DOS_SI:WORD, DOS_ERR:WORD
+	EXTRN	DOS_DI:WORD
+	EXTRN	gintstk:word
+;
+;
+rparmblk	dw	0,0	; for load overlay function
+rhdrbuf		rb	20h
+;
+;
+	cseg
+;
+;
+inxif	db	0
+blank	db	0
+errsav	dw	0	; TRO 9/18/84  Add DOS error trapping
+	dw 	0
+cpmsav	dw	0	
+	dw	0	
+savax	dw	0
+savds	dw	0
+axtmp	dw	0
+sstmp	dw	0
+sptmp	dw	0
+;
+;
+;
+;
+cxc33:
+	push	bx
+	push	dx
+	cmp	ax,cx
+	jnz	cxc1
+	shr	bx,1
+	shr	dx,1
+	cmp	bx,dx
+	jnz	cxc1
+	pop	dx
+	pop	bx
+	cmp	bx,dx
+	jmps	cxc2
+cxc1:
+	pop	dx
+	pop	bx
+cxc2:
+	ret
+;
+;
+cxd33:
+	xchg	ax,bx
+	mov	cx,dx
+	jcxz	div0
+	cmp	cx,1
+	jne	not_div1
+	xchg	ax,bx
+	xor	cx,cx
+	mov	dx,cx
+	ret
+not_div1:
+	xor	dx,dx
+	xchg	ax,bx
+	push	ax
+	div	cx
+	mov	di,ax
+	mul	cx
+	pop	dx
+	sub	dx,ax
+	mov	ax,bx
+	div	cx
+	sub	cx,cx
+	mov	bx,ax
+	mov	ax,di
+	ret
+div0:
+	mov	ax,-1
+	mov	bx,ax
+	ret
+;
+;
+cxm33:
+	push	dx
+	mul	dx
+	pop	dx
+	push	ax
+	mov	ax,bx
+	push	dx
+	mul	cx
+	mov	cx,ax
+	mov	ax,bx
+	pop	dx
+	mul	dx
+	add	dx,cx
+	pop	cx
+	add	dx,cx
+	mov	bx,ax
+	mov	ax,dx
+	ret
+;
+;	cpmexec(pclbuf)
+;		LONG		pclbuf; 	/* ptr to clbuf */
+;
+;	clbuf = 0, "sdir *.*", 0
+;
+;cpmexec:
+;	push	bp
+;	mov	bp,sp
+;	mov	cx,145
+;	mov	dx,192
+;	int	224		; Set priority to better than TMP so we can
+;				;attach to console after P_CLI
+;pcli:
+;	mov	cx,150		; Startup .CMD or RSP
+;	mov	dx, 4[bp]	; offset clbuf
+;	mov	ax, 6[bp]	; segment clbuf
+;	push	ds
+;	mov	ds, ax
+;	int	224		; P_CLI
+;	pop	ds
+;	or	ax,ax		; Did we get a error?
+;	jz	ok		; NO
+;				; CX has error code
+;	mov	DOS_ERR, 1
+;	mov	ax, 08
+;	mov	DOS_AX, ax
+;ok:
+;	mov	cx,146
+;	int	224		; Attach to the console
+;	mov	cx,145
+;	mov	dx,200
+;	int	224		; Restore to normal priority
+;	mov	DOS_ERR, 0
+;	pop	bp
+;	ret
+;
+;
+;	for all dos calls except exec
+;
+;
+__DOS:
+	push	bp
+	mov	bp,sp
+	push	es
+	push	si
+	push	di
+	mov	ax,DOS_DI
+	mov	di,ax
+	mov	ax,DOS_SI
+	mov	si,ax
+	mov	ax,DOS_ES
+	mov	es,ax
+	mov	ax,DOS_AX
+	mov	bx,DOS_BX
+	mov	cx,DOS_CX
+	mov	dx,DOS_DX
+	mov	savax,ax
+	push	ds
+	mov	ax,DOS_DS
+	mov	ds,ax
+	mov	ax,savax
+	int	21h
+	mov	savax,ax
+	mov	ax,ds
+	mov	savds,ax
+	pop	ds
+	mov	ax,savax
+	jc	d_error
+	mov	DOS_ERR,0
+	jmps	d_exit
+d_error:
+	mov	DOS_ERR,1
+d_exit:
+	mov	DOS_AX,ax
+	mov	DOS_BX,bx
+	mov	DOS_CX,cx
+	mov	DOS_DX,dx
+	mov	ax,savds
+	mov	DOS_DS,ax
+	mov	ax,es
+	mov	DOS_ES,ax
+	mov	ax,si
+	mov	DOS_SI,ax
+	mov	ax,di
+	mov	DOS_DI,ax
+	pop	di
+	pop	si
+	pop	es
+	pop	bp
+	ret
+;
+;
+;
+__EXEC:
+	push	bp
+	mov	bp,sp
+	push	es
+	push	ds
+					; update ss,sp in uda in case this
+					;   is execing a crystal application
+	mov	bx,rlr			; bx = rlr
+	mov	bx,4[bx]		; bx = uda address
+	mov	ax,sp
+	mov	2[bx],ax		; new saved sp = sp
+	mov	ax,ss
+	mov	4[bx],ax		; new saved ss = ss
+	mov	ax, 28[bx]		; save away ss, sp for restoring later
+	inc	ax			; increment exec level
+	mov	28[bx], ax		; store back next exec level
+	dec	ax
+	shl	ax, 1
+	shl	ax, 1
+	add	bx, ax			; index past other restoring ss,sp's
+	mov	ax,sp
+	mov	30[bx],ax		; restore sp = sp
+	mov	ax,ss
+	mov	32[bx],ax		; restore ss = ss
+	mov	ax,DOS_ES		; establish calling registers
+	mov	es,ax
+	mov	ax,DOS_AX
+	mov	bx,DOS_BX
+	mov	cx,DOS_CX
+	mov	dx,DOS_DX
+	mov	savax,ax
+	mov	ax,DOS_DS
+	mov	ds,ax
+	mov	ax,savax
+	int	21h
+	cli
+	mov	savax,ax
+	mov	ax, seg rlr
+	mov	ds, ax
+	mov	bx,rlr			; bx = rlr
+	mov	bx,4[bx]		; bx = uda address
+	mov	ax, 28[bx]		; ax = exec level
+	dec	ax			; decrement exec level
+	mov	28[bx], ax		; save it back
+	shl	ax, 1			; index to proper restore ss,sp
+	shl	ax, 1			; index to proper restore ss,sp
+	add	bx, ax
+	mov	ax, 30[bx]		; sp = restore sp
+	mov	sp, ax
+	mov	ax, 32[bx]		; ss = restore ss
+	mov	ss, ax
+	mov	ax, savax
+	sti
+	pop	ds
+	jc	de_error
+	mov	DOS_ERR,0
+	jmps	de_exit
+de_error:
+	mov	DOS_ERR,1
+de_exit:
+	mov	DOS_AX,ax
+	pop	es
+	pop	bp
+	ret
+;
+;
+cli:
+	cli
+	ret
+;
+;
+sti:
+	sti
+	ret
+;
+; DOS error trapping code. TRO 9/18/84
+;
+takeerr:
+	push	bp
+	mov	al,024h
+	mov	bp,offset errsav
+	mov	dx,cs:offset err_trap
+	call	inttake
+	pop	bp
+	ret
+
+giveerr:
+	push	bp
+	mov	al,024h
+	mov	bp,offset errsav
+	call	intgive
+	pop	bp
+	ret
+
+inttake:
+	push	es
+	mov	ah,035h		; set fn # (int# passed in al)
+	int 	021h		; get current vector
+	mov	cs:word ptr 2[bp],es	; saving current values
+	mov	cs:word ptr 0[bp],bx
+	pop	es
+intset:
+	push	ds
+	mov	bx,cs		; new vector seg is current cseg
+	mov	ds,bx	
+	mov	ah,025h		; new vector offset already in dx
+	int	021h
+	pop	ds
+	ret
+
+intgive:
+	push	ds
+	mov	dx,cs:word ptr 0[bp]	; set up old offset
+	mov	ds,cs:word ptr 2[bp]	; and segbase
+	mov	ah,025h			; int # already in al
+	int	021h
+	pop	ds
+	ret
+
+; A DOS error will trap to here (err_trap) after takeerr is called.
+; For a description of the register state, see PCDOS 2.1 Technical
+; Ref. Manual, pp. 5-5 to 5-10
+
+err_trap:
+	push 	es	; save the DOS environment
+	push	ds
+	push	bp
+	push	di
+	push	si
+	push	dx
+	push	cx
+	push	bx
+	push	ax
+	mov	bx,ss
+	mov	eintss,bx
+	mov	bx,sp
+	mov	eintsp,bx
+	mov	bx,seg eintstk
+	mov	ss,bx
+	mov	ds,bx
+	mov	es,bx
+	mov	sp,offset eintstk
+	sti
+	or	ah,ah		; device or disk?
+	js	dev_trap	; trap device
+	xor	ah,ah		; clear MSB
+	push 	ax
+	and	di,0FFH		; isolate err#
+	mov	al,byte ptr err_tbl[di] ; translate to alert #
+	push	ax
+	jmp	err_x
+
+err_tbl:
+	db	0,5,1,5,2,5,2,2,2,4,3,3,3 ; 13 entries
+
+dev_trap:
+	mov	ax,0FFFFH	; drive := -1 for device
+	push	ax
+	mov	ax,4
+	push	ax
+
+err_x:
+	mov	bx,rlr		; get the REAL Crystal 
+	mov	bx,4[bx]	; sp & ss out of the way
+	mov	ax,2[bx]
+	mov	envsp,ax
+	mov	ax,4[bx]
+	mov	envss,ax 
+	call	eralert		; return Z (abort) or not-Z (retry)
+	mov	bx,rlr
+	mov	bx,4[bx]	; and remember, Lee, when this finally
+	mov	cx,envsp	; blows up - I TOLD YOU SO!
+	mov	2[bx],cx	; TRO - 9/24/84
+	mov	cx,envss
+	mov	4[bx],cx
+	cli
+	or	ax,ax		; make sure z flag is set up
+	pop	ax		; get back err #
+	mov	bx,eintss
+	mov	ss,bx		; reload saved stack regs 
+	mov	bx,eintsp
+	mov	sp,bx
+	jz	err_abort
+
+err_retry:
+	pop	ax		; restore DOS environment
+	pop	bx
+	pop	cx
+	pop	dx
+	pop	si
+	pop	di
+	pop	bp
+	pop	ds
+	pop	es
+	mov	al,1		; set retry flag for DOS
+	iret
+
+err_abort:
+	add	ax,64		; make into pseudo-DOS error #
+	mov	cx,14
+poploop:
+	pop	bx		; toss 13: 12 DOSregs, 1 userreg (ax)
+	loop	poploop		; keep #14 (bx)
+	pop	cx
+	pop	dx
+	pop	si
+	pop	di
+	mov	bp,sp
+	or	ss:byte ptr 10[bp],1	; set stacked carry flag
+	pop	bp
+	pop	ds
+	pop	es
+	stc			; set error flag
+	iret			; return to caller
+
+;
+;	use DOS 2.0's tick
+;
+tikcod:
+	push ds
+	push ax
+	push bx
+ 	push cx
+	push dx
+	mov ax, seg indos		; get this ds
+	mov ds,ax
+chk_time:	
+	mov	ax,CMP_TICK		; sub off 1 ticks worth
+	mov	bx,ti_hicmp
+	or 	ax,bx			; do we have time to tick off
+	jz	tpollmb			; no time to do skip over
+	mov	cx,NUM_TICK		; add 1 to # of ticks we've waited
+	mov	dx,ti_hinum
+	add	cx,1			; add 1 tick to NUM_TICK	
+	adc	dx,0
+	mov	NUM_TICK,cx
+	mov	ti_hinum,dx
+	sub	ax,1			; sub off 1 ticks worth from CMP_TICK
+	sbb	bx,0
+	mov	CMP_TICK,ax
+	mov	ti_hicmp,bx
+	or	ax,bx
+	jnz	tpollmb			; more to do so go on
+updt_time:
+	mov save_ss, ss
+	mov save_sp, sp
+	mov sp, offset gintstk
+	mov ax, ds
+	mov ss, ax
+	push si ! push di ! push bp
+	push es
+	push	dx			; push high number of ticks
+	push	cx			; push low number of ticks
+	mov	ax,offset tchange	; push address of tchange
+	push	ax
+	call	forkq			; set up forkq
+	add	sp,6
+chk_delay:
+	cmp	gl_bdely, 0
+	je	offstk
+	jmps	do_delay
+tpollmb:
+	cmp	gl_bdely, 0
+	je	all_done
+	mov save_ss, ss
+	mov save_sp, sp
+	mov sp, offset gintstk
+	mov ax, ds
+	mov ss, ax
+	push si ! push di ! push bp
+	push es
+do_delay:
+	mov	ax,1
+	push	ax
+	call	b_delay			; decrement button delay time
+	add	sp,2
+offstk:					; get off our stack
+ 	pop es
+	pop bp ! pop di ! pop si
+	mov sp, save_sp
+	mov ss, save_ss
+all_done:
+	pop dx
+	pop cx
+	pop bx
+	pop ax
+nxt_int:				; chain to next interrupt
+	pushf
+	callf	dword ptr tiksav
+	pop ds
+	iret
+;
+;
+;
+;	interrupts should be off
+;
+takecpm:
+	push	bp
+	mov	al,GEMENTRY
+	mov	bp,offset cpmsav
+	mov	dx,cs:offset cpmcod
+	call	inttake
+	pop	bp
+	ret
+;
+;
+;
+retake:
+	push	bp
+	mov	al,GEMENTRY
+	mov	dx,cs:offset cpmcod
+	call 	intset
+	mov	al,024h
+	mov	dx,cs:offset err_trap
+	call 	intset
+	pop	bp
+	ret
+;
+;	interrupts should be off
+;
+givecpm:
+	push	bp
+	mov	al,GEMENTRY
+	mov	bp,offset cpmsav
+	call	intgive
+	pop	bp
+	ret
+;
+;
+cpmcod:
+	jmps	gemchk
+	db	'GEMAES20', 0			; id message
+gemchk:
+	cmp	cx,200
+	jz	gemcod
+	cmp	cx,201
+	jz	gemcod
+	jmpf	dword ptr cpmsav		; let other guy do iret
+;
+; gem filter entry
+; for external gem calls
+;
+gemcod:
+	sti					; turn interrupts on
+	push	bx
+	push	cx
+	push	dx
+	push	si
+	push	di
+	push	bp
+	push	es
+	push	ds
+	mov	di,ds
+	mov	ax,seg rlr
+	mov	ds,ax
+	mov	ax,bx			; save bx
+	mov	bx,rlr
+	mov	bx,04h[bx]		; uda address
+	cli
+	mov	word ptr [bx],1		; in super
+	mov	6[bx],sp
+	mov	8[bx],ss
+	mov	sp,2[bx]		; load super stack
+	mov	ss,4[bx]	
+	sti
+	mov	bx,ax			; restore bx
+; whew !
+	push	es			; user es
+	push	bx			; user bx
+	cmp	cx, 200
+	jne	newsuper
+	call	super			; super( es:bx)
+newsuper:
+	call	nsuper
+;
+; return from gementry by calling supret
+;
+; stack is:
+;	temp space (word)
+;	bp (word)
+;	retadd to gementry (above)
+;	es:bx parm (long)
+; a6->  olda6		(super's link instruction)
+;	super automatic
+;	result (long) from function (to go in d0, axbx,esbx,or ax)
+;	p->err (word) from function (to go to d1, cx)
+; sp->	super retadd
+;
+supret: 
+	mov	di,bp			; play that shell game
+	mov	bp,sp
+	mov	ax,4[bp]
+	mov	sp,di
+	add	sp,10			; skip retadd and parms
+;
+	mov	bx,rlr
+	mov	bx,04h[bx]		; uda
+	cli
+	mov	word ptr [bx],0		; not in super
+	mov	2[bx],sp
+	mov	4[bx],ss
+	mov	sp,6[bx]
+	mov	ss,8[bx]
+	sti
+	pop	ds
+	pop	es
+	pop	bp
+	pop	di
+	pop	si
+	pop	dx
+	pop	cx
+	pop	bx
+	iret
+;
+;
+;
+;
+setdsss:
+	pop	ax			; pop return address
+	pop	bx			; bx = uda
+	push	ax			; push return address
+	mov	ax,ds
+	mov	10[bx],ax
+	mov	4[bx],ax
+	mov	word ptr [bx],1		; insuper = true
+	ret
+;
+;
+;	routine to call far into a user supplied routine with
+;	the parameters from an object.  The objects new state
+;	should be returned for any remaining state changes that
+;	need to occurr
+;	
+;	far_call(code, data)
+;		LONG		code
+;		LONG		data
+;
+;	data points at the following block:
+;		PARMBLK
+;		{
+;			LONG	pb_tree;
+;			WORD	pb_obj;
+;			WORD	pb_prevstate;
+;			WORD	pb_currstate;
+;			WORD	pb_x, pb_y, pb_w, pb_h;
+;			WORD	pb_xc, pb_yc, pb_wc, pb_hc;
+;			LONG	pb_parm;
+;		}
+;
+;
+far_call:
+	push	bp
+	mov	bp,sp
+	mov	ax,4[bp]
+	mov	calloff,ax
+	mov	ax,6[bp]
+	mov	callseg,ax
+	mov	bx,8[bp]
+	mov	ax,10[bp]
+	callf	dword ptr calloff
+	pop	bp
+	ret
+;
+;	called far with ax = button state
+;	interrups should be off
+;
+far_bcha:
+	push	bp
+	pushf
+	cli
+	push	ds
+	push	es
+	push	ax
+	mov	bx,ax
+	mov	ax,ss
+	mov	gintss,ax
+	mov	ax,sp
+	mov	gintsp,ax
+	mov	ax,seg gintstk
+	mov	ss,ax
+	mov	ds,ax
+	mov	es,ax
+	mov	sp,offset gintstk
+	cmp	gl_play, 0
+	jne	nobchg
+	push	bx
+	call	b_click			; call the button click code
+	add	sp,2
+nobchg:
+	mov	ax,gintss
+	mov	ss,ax
+	mov	ax,gintsp
+	mov	sp,ax
+	pop	ax
+	pop	es
+	pop	ds
+	popf
+	pop	bp
+	retf
+;
+;	bx = xrat, cx = yrat
+;	interrupts should be off
+far_mcha:
+	push	bp
+	pushf
+	cli
+	push	ds
+	push	es
+	push	bx
+	push	cx
+	mov	ax,ss
+	mov	gintss,ax
+	mov	ax,sp
+	mov	gintsp,ax
+	mov	ax,seg gintstk
+	mov	ss,ax
+	mov	ds,ax
+	mov	es,ax
+	mov	sp,offset gintstk
+	cmp	gl_play, 0
+	jne	nomchg
+	push	cx
+	push	bx
+	mov	ax,offset mchange
+	push	ax
+	call	forkq
+	add	sp,6
+nomchg:
+	mov	ax,gintss
+	mov	ss,ax
+	mov	ax,gintsp
+	mov	sp,ax
+	pop	cx
+	pop	bx
+	pop	es
+	pop	ds
+	popf
+	pop	bp
+	retf
+;
+;	drawrat(newx, newy)
+;
+drawrat:
+	push	bp
+	mov	bp,sp
+	mov	bx,4[bp]
+	mov	cx,6[bp]
+	callf	dword ptr drwaddr
+	pop	bp
+	ret
+;
+;
+justretf:
+	retf
+;
+;
+	dseg
+calloff	dw	offset justretf
+callseg	dw	seg justretf
+drwaddr	dw	offset justretf
+drwseg	dw	seg justretf
+tikaddr	dw	offset tikcod
+tikseg	dw	seg tikcod
+tiksav	dw	0
+	dw	0
+	rw	256
+eintstk	dw	0
+;
+;
+	cseg
+gintsp	dw	0
+gintss	dw	0
+eintsp	dw	0
+eintss	dw	0
+envsp	dw	0
+envss	dw	0
+;
+;
+	end
+

@@ -1,0 +1,26 @@
+--------------------------------------------------
+LINK-86 Linkage Editor                 Version 1.3
+Serial No. 3156-0000-001485    All Rights Reserved
+Copyright (C) 1982-1984     Digital Research, Inc.
+--------------------------------------------------
+
+Undefined            Referenced in
+Symbol           File           Module
+------           ----           ------
+
+GD_CLI           C:CH.OBJ       CH
+AD_INTOU         C:CH.OBJ       CH
+AD_CONTR         C:CH.OBJ       CH
+AD_INTIN         C:CH.OBJ       CH
+GD_EXEC          C:CH.OBJ       CH
+GDOS_DS          C:STEALKBD.OBJ STEALKBD
+GDOS_20_ENTRY    C:INTS.OBJ     INTS
+GDOS_13_ENTRY    C:INTS.OBJ     INTS
+GSX2_SAV         C:INTS.OBJ     INTS
+GSX_SAV          C:INTS.OBJ     INTS
+
+CODE    03BA6
+DATA    012BC
+
+NO STACK SEGMENT
+USE FACTOR:  08%

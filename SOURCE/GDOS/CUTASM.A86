@@ -1,0 +1,100 @@
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*/;
+;
+;
+;
+;
+	dseg
+
+	EXTRN		ad_scrn:dword		;long address of screen
+
+
+	cseg
+;
+;
+;
+;
+	PUBLIC		ros_scur
+	PUBLIC		ros_gcur
+	PUBLIC		ros_revv
+	PUBLIC		ros_gcha
+	PUBLIC		ros_gmod
+	PUBLIC		ros_smod
+;
+;
+ros_scur:
+	push	bp
+	mov	bp,sp
+	mov	dx,4[bp]			; cursor x
+	mov	ax,6[bp]			; cursor y
+	mov	ah,al
+	xor	al,al
+	or	dx,ax
+	xor	bx,bx				; page 0
+	xor	ax,ax				; clear it
+	mov	ah,2				; set cursor pos function
+	int	10h
+	pop	bp
+	ret
+;
+ros_revv:
+	push	bp
+	mov	bp,sp
+	push	ds
+	mov	di,4[bp]			; offset
+	mov	cx,6[bp]			; width
+	mov	ax,word ptr ad_scrn+2		; segment of screen
+	mov	ds,ax
+	mov	ax,7700h
+xorloop:
+	xor	0[di],ax
+	inc	di
+	inc	di
+	loop	xorloop
+;
+	pop	ds
+	pop	bp
+	ret
+;
+ros_gcha:
+	push	bp
+	mov	bp,sp
+	push	ds
+	mov	di,4[bp]			; offset
+	mov	ax,word ptr ad_scrn+2		; segment of screen
+	mov	ds,ax
+	mov	ax,0[di]
+	and	ax,007Fh			; just the char
+	pop	ds
+	pop	bp
+	ret
+
+ros_gcur:
+	mov	ah,3				; read cursor pos
+	mov	bh,0				; page 0
+	int	10h				; video interrupt
+	mov	ax,dx				; dh,dl = row,column
+	ret
+
+ros_gmod:
+	mov	ah,3				; read cursor pos/mode
+	mov	bh,0				; page 0
+	int	10h				; video interrupt
+	mov	ax,cx				; bh,bl = cursor mode
+	ret
+
+ros_smod:
+	pop	ax
+	pop	cx
+	push	cx
+	push	ax
+	mov	ah,1				; set cursor type
+	int	10h
+	ret
+
+	end
+

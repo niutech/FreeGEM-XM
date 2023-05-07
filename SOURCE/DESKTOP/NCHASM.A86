@@ -1,0 +1,27 @@
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                           
+;*/
+
+	cseg
+
+public bio_kb		; WORD bio_kb(ax) WORD ax;
+bio_kb:			; keyboard interrupt
+	push	bp
+	mov	bp,sp
+	mov	ax,20h  ; just return blank
+	pop	bp
+	ret
+
+public bio_com		; WORD bio_com(dx, ax) WORD dx, ax; 
+bio_com:		; com port interrupt
+	push	bp
+	mov	bp,sp
+	mov	ax,6[bp]
+	mov	dx,4[bp]
+	int	14h 
+	pop	bp
+	ret
+

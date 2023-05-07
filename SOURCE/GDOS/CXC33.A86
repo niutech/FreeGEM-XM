@@ -1,0 +1,68 @@
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*/
+
+	cseg
+;
+;PUBLIC  xcovf
+;PUBLIC  _mnext
+;
+;xcovf:	nop
+;_mnext: nop 
+;
+PUBLIC	cxd33 
+PUBLIC	cxc33	
+;
+cxd33:
+	xchg	ax,bx
+	mov	cx,dx
+	jcxz	div0
+	cmp	cx,1
+	jne	not_div1
+	xchg	ax,bx
+	xor	cx,cx
+	mov	dx,cx
+	ret
+not_div1:
+	xor	dx,dx
+	xchg	ax,bx
+	push	ax
+	div	cx
+	mov	di,ax
+	mul	cx
+	pop	dx
+	sub	dx,ax
+	mov	ax,bx
+	div	cx
+	sub	cx,cx
+	mov	bx,ax
+	mov	ax,di
+	ret
+div0:
+	mov	ax,-1
+	mov	bx,ax
+	ret
+;
+cxc33:
+	push	bx
+	push	dx
+	cmp	ax,cx
+	jnz	cxc1
+	shr	bx,1
+	shr	dx,1
+	cmp	bx,dx
+	jnz	cxc1
+	pop	dx
+	pop	bx
+	cmp	bx,dx
+	jmps	cxc2
+cxc1:
+	pop	dx
+	pop	bx
+cxc2:
+	ret
+;
+

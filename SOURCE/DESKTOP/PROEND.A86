@@ -1,0 +1,19 @@
+;/*	PROEND.A86		4/18/84 - 4/18/84	Lee Lorenzen	*/
+;
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                       
+;*/
+;
+	dseg
+;
+;
+	PUBLIC		PROGEND
+;
+;
+PROGEND	dw	0
+;
+;
+	end

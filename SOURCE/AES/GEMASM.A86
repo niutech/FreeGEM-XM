@@ -1,0 +1,232 @@
+;/*	LDISPA88.A86	1/28/84 - 01/18/85	Lee Jay Lorenzen	*/
+;/*	for Lattice C		*/
+;
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*                  Historical Copyright  
+;*	-------------------------------------------------------------
+;*	GEM Application Environment Services		  Version 3.0
+;*	Serial No.  XXXX-0000-654321		  All Rights Reserved
+;*	Copyright (C) 1986			Digital Research Inc.
+;*	-------------------------------------------------------------
+;*/
+;
+;
+	cseg
+	PUBLIC	savestat
+	PUBLIC	switchto
+	PUBLIC	gotopgm
+	PUBLIC	dsptch
+	PUBLIC	usergo
+	PUBLIC	psetup
+	PUBLIC  dspstk
+	EXTRN	disp:near
+
+	dseg
+	EXTRN	rlr:word, indisp:byte
+	cseg
+;
+;	Push flags and code pointer onto a processes stack in preparation
+;	for an IRET that will start this process executing
+;
+;	--->	ip
+;		cs
+;		flags
+;	       =======
+;
+;		VOID
+;	psetup(p, codevalue)
+;		PD		*p;
+;		CODE		*codevalue;
+;
+psetup:
+	push	bp
+	mov	bp,sp
+	mov	bx,4[bp]		; bx = *pd
+	mov	bx,04h[bx]		; ds:bx = pd->uda
+	mov	bx,2[bx]		; ds:bx = uda->SUPSTK
+	sub	bx,2			; predecrement
+	pushf				; use current flags
+	pop	ax			; push flags first
+	mov	[bx],ax			; store word on stack
+	sub	bx,2			; predecrement
+	mov	ax,cs			; push code segment next
+	mov	[bx],ax			; store hi-word on stack
+	sub	bx,2			; predecrecment
+	mov	ax,6[bp]		; push code offset last
+	mov	[bx],ax			; store lo-word on stack
+	mov	ax,bx
+	mov	bx,4[bp]	
+	mov	bx,04h[bx]
+	mov	2[bx],ax 		; restore stack pointer
+	pop	bp
+	ret
+;
+;
+;
+dsptch:
+	test	indisp,0ffh
+	jz	dsp1
+	ret
+dsp1:	sub	sp,4		; leave 1 extra word
+	push	bp
+	pushf
+	mov	bp,sp
+	push	ax
+	mov	ax,8[bp]
+	mov	4[bp],ax
+	mov	ax,cs
+	mov	6[bp],ax
+	mov	ax,[bp]
+	mov	8[bp],ax		; flags
+	pop	ax
+	popf
+	pop	bp
+	push	ds
+	push	es
+	push	bx		; dispatch code will crunch these regs
+	push	si
+	jmp	disp
+;
+;
+;
+; usergo(addr) -- execute in user mode
+;
+usergo:
+	mov	bp,sp
+	lds	di,2[bp]
+	mov	bx,seg rlr
+	mov	es,bx
+	mov	bx,es:rlr
+	les	bx,es:04h[bx]
+	cli
+	mov	es:word ptr [bx],1
+	mov	es:2[bx],sp
+	mov	es:4[bx],ss
+	mov	sp,es:6[bx]
+	mov	ss,es:8[bx]
+	sti	
+	jmpf	dword ptr [di]
+;
+;
+;
+;
+gotopgm:
+	mov	bp,sp
+	mov	bx,seg rlr
+	mov	es,bx
+	mov	bx,es:rlr
+	mov	bx,es:04h[bx]		; uda
+	cli
+	mov	es:word ptr [bx],0	; resume user stack
+	mov	es:2[bx],sp
+	mov	es:4[bx],ss
+	sti
+	mov	bx,es:rlr
+	push	es:word ptr 18[bx]	; p_ldaddr segment 
+	push	es:word ptr 16[bx]	; p_ldaddr offset
+	retf
+;
+;
+; this routine is entered by a call from dsptch, 
+;       which is entered from an interrupt
+; 	handler whose regs have all been restored after processing.
+;
+; therefore, the stack has the following items (after the link instruction):
+;
+;			+18	flags of interrupted code (short)
+;	saved sp->	+14	return address of interrupted code (long)
+;			+12     ds of interrupted code
+;			+8	es:bx of interrupted code
+;			+6	si
+; 	 		+4	bp of interrupted code (push bp/sub sp,4)
+;			+2	/* dispatcher local storage */
+;	dbp->		+0	/* dispatcher local storage */
+;
+;			+4	uda address to store regs
+;			+2	return address in dispatcher
+; 	bp->		+0	dispatcher bp (dbp)
+;
+; the dispatcher will run on the current super stack,
+; 	at context switch, it will call switchto which will end with an rte
+;
+savestat:
+	cli				; disable ints (blech)
+	test	indisp,0ffh		; no TAS anymore
+	jz	okgo			; no one's inside, go for it
+	mov	sp,bp
+	pop	bp
+	iret
+;
+;
+okgo:
+	inc	indisp			; TAS (sortof)
+	sti
+	push	bp
+	mov	bp,sp
+	push	ds
+	mov	bx,4[bp]		; uda address
+	mov	4[bx],ss
+	mov	24[bx],di
+	mov	14[bx],ax
+	mov	18[bx],cx
+	mov	20[bx],dx
+	mov	si,[bp]
+	mov	di,ss
+	mov	es,di			; es:si now dispatcher area
+	lea	di,14[si]
+	mov	2[bx],di		; saved sp
+	mov	ax,es:12[si]
+	mov	10[bx],ax	; ds
+	mov	ax,es:10[si]
+	mov	12[bx],ax	; es
+	mov	ax,es:4[si]
+	mov	26[bx],ax	; bp
+	mov	ax,es:8[si]
+	mov	16[bx],ax	; bx
+	mov	ax,es:6[si]
+	mov	22[bx],ax	; si
+;
+	lea	si,[bp]
+; load a big dispatcher stack (for forks, etc.)
+	cli
+	mov	ax,seg dspstk
+	mov	ss,ax
+	mov	sp,offset dspstk - 4
+	mov	bp,offset dspstk - 4
+	sti
+	push	es: word ptr 2[si]
+	ret
+;
+;
+switchto:
+	add	sp,2		; trash the ret. add
+	cli
+	dec	indisp
+	pop	si
+	mov	ax,14[si]
+	mov	cx,18[si]
+	mov	dx,20[si]
+	mov	bx,16[si]
+	mov	bp,26[si]
+	mov	di,24[si]
+	mov	es,12[si]
+	mov	sp,2[si]
+	mov	ss,4[si]
+	sti
+	push	word ptr 10[si]		; ds
+	mov	si,22[si]
+	pop	ds
+	iret			; no, really ???
+;
+	dseg
+	public	dspstk
+	rw	192
+dspstk	dw	0
+;
+	end
+
+

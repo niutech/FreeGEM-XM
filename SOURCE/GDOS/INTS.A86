@@ -1,0 +1,367 @@
+;/*                              20000403-20000405       Ben A L Jemmett */
+;/*                         (gd_int16 - fixed IRET bug, optimised a bit) */
+
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*/
+
+;/*      A FreeGEM/XM source file.             http://www.deltasoft.com/ */
+;/*      Some modifications are (C) Copyright Ben A L Jemmett, 2000.     */
+
+	cseg
+
+; for porting: note that int10h is used 3 times in this module 
+
+RETURN_KEY	equ	1c0dh
+ESCAPE_KEY	equ	4eh
+GEM_INT		equ	0efh
+
+extrn	GDOS_13_Entry:Near		; vdi entry point int 0eh
+extrn	GDOS_20_Entry:Near		; vdi entry point int efh
+
+extrn	gsx_sav:word			; original int e0h interrupt vector
+extrn   gsx2_sav:word			; original int efh interrupt vector
+
+public	ad_int16			; original int 16h interrupt vector
+ad_int16	rd	1
+ad_int21	rd	1		; original int 21h interrupt vector
+
+public chg_ints				; change interrupts, called on startup
+chg_ints:
+		xor	ax, ax
+		mov	es, ax
+							; change int e0h
+		mov	ax, es:word ptr .380h
+		mov	gsx_sav, ax
+		mov	es:word ptr .380h, offset gdos_13_entry
+
+		mov	ax, es:word ptr .382h
+		mov	gsx_sav+2, ax
+		mov	es:word ptr .382h, seg gdos_13_entry
+							; change int efh
+		mov	ax, es:word ptr .3bch
+		mov	gsx2_sav, ax
+		mov	es:word ptr .3bch, offset gdos_20_entry
+
+		mov	ax, es:word ptr .3beh
+		mov	gsx2_sav+2, ax
+		mov	es:word ptr .3beh, seg gdos_20_entry
+							; change int 16h
+		mov	ax, es:word ptr .58h 
+		mov	word ptr ad_int16, ax
+		mov	es:word ptr .58h, offset gd_int16
+
+		mov	ax, es:word ptr .5ah
+		mov	word ptr ad_int16 + 2, ax
+		mov	es:word ptr .5ah, seg gd_int16
+							; change int 21h
+		mov	ax, es:word ptr .84h 
+		mov	word ptr ad_int21, ax
+		mov	es:word ptr .84h, offset gd_int21
+
+		mov	ax, es:word ptr .86h
+		mov	word ptr ad_int21 + 2, ax
+		mov	es:word ptr .86h, seg gd_int21
+
+		ret
+
+public rest_ints			; restore ints upon exit of program
+rest_ints:
+		mov	ax, 0			; must "mov" to preserve CF
+		mov	es, ax
+							; restore int e0h
+		mov	ax, gsx_sav
+		mov	es:word ptr .380h, ax
+		mov	ax, gsx_sav+2
+		mov	es:word ptr .382h, ax
+							; restore int efh
+		mov	ax, gsx2_sav
+		mov	es:word ptr .3bch, ax
+		mov	ax, gsx2_sav+2
+		mov	es:word ptr .3beh, ax
+							; restore int 16h
+		mov	ax, word ptr ad_int16
+		mov	es:word ptr .58h, ax 
+		mov	ax, word ptr ad_int16 + 2
+		mov	es:word ptr .5ah, ax
+							; restore int 21h
+		mov	ax, word ptr ad_int21
+		mov	es:word ptr .84h, ax 
+		mov	ax, word ptr ad_int21 + 2
+		mov	es:word ptr .86h, ax
+
+		ret
+
+public esckey
+esckey		db ESCAPE_KEY	; escape character
+
+public pastechar		; first paste character to return 
+pastechar	dw 0		; to initial int16 call
+ 
+funcnum		dw -1		; user's int21 function number 
+cpos_0ah	rw 1		; cursor position before int21/func 0ah
+one		dw 1		; used with cmp to set zero flag
+public kbescflg			; 0 = no event, 1 = user hit ESCAPE_KEY in
+kbescflg	dw 0		; int16, 2 = user hit ESCAPE_KEY in int21
+ 
+public in_gdos			; used to prevent reentrancy 
+in_gdos		dw 0
+
+;*****************************************************************
+				; int16 handler
+public	gd_int16
+gd_int16:
+                cmp     in_gdos,0               ; check for reentrancy 
+                je      check_function
+                jmpf    ad_int16
+check_function:					; chk if 0 <= ah <= 2
+		cmp	ah,2
+;                jbe     check_shift            ; BALJ 20000405 - see below.
+                jb      chk_for_char_avail
+
+; BALJ 20000403 - This next IRET seems wrong - surely unhandled funcs
+;                 should be passed through to the BIOS handlers?
+;                 Replaced with a JMP to BIOS.  Fixes keyboard in DOS
+;                 applications.
+
+;                iret                            ; bad func number
+                jmpf    ad_int16
+
+; BALJ 20000405 - Optimised this bit out - it was doing:
+;                 if (func <= 2)
+;                   if (func < 2)
+;                     my_handler();
+;                   else
+;                     bios_handler();
+;                 else
+;                   bios_handler();
+;
+;check_shift:                                    ; if func 2, pass on
+;                jb      chk_for_char_avail
+;                jmpf    ad_int16                ; passing on
+
+chk_for_char_avail:
+; new 9-22-86		; restore entry flags
+push bp
+mov bp,sp
+push ax
+mov ax,6[bp]
+push ax
+popf
+pop ax
+pop bp
+
+		cmp	ah,1
+		jne	chk_paste		; must be func 0
+
+		cmp	pastechar, 0		; must be func 1, poll char 
+		je	chk_bios		; if paste char set ZF = 0
+		mov	ax,pastechar
+		cmp	one,0
+                retf    2                       ; set ZF = 0; after iret
+
+chk_bios:
+	 	pushf				; if no paste char, ask bios 
+		callf	ad_int16		; if char avail		
+
+		jnz	chk_char		; jmp if ZF = 0
+                retf    2                       ; set ZF = 1; after iret
+
+chk_char:
+                cmp     ah,esckey               ; if char avail, see if ESC KEY
+		je	clear_char
+		cmp	one,0			; set ZF = 0 
+                retf    2
+
+clear_char:					; if ESC KEY clear character
+		mov	ah,0
+		pushf				; call bios to clear character
+		callf	ad_int16
+
+		mov	kbescflg,1		; set keyboard escape flag
+		cmp	funcnum,-1		; skip gdos call if in int 21
+		jne	skip_gdos_int
+
+		int	GEM_INT			; call gdos
+		jmp	no_code_ret
+skip_gdos_int:
+		mov	ax,funcnum
+		cmp	ah,0ah			; check for DOS function 0ah
+		je	send_cr
+		cmp	ah,07h			; check for DOS function 07h
+		je	send_cr
+
+		cmp	ah,0ch			; check for DOS function 0ch
+		jne	no_code_ret
+		cmp	al,0ah			; if func 0ch, check for sub
+		je	send_cr			; functions 0ah and 07h
+		cmp	al,07h
+		je	send_cr
+no_code_ret:		
+		xor	ax,ax			; set ZF = 1, after iret
+                retf    2                       ; no code available
+
+send_cr:
+		mov	ax,RETURN_KEY
+		mov	pastechar,RETURN_KEY    ; create CR for buffered input
+		cmp	one,0
+                retf    2                       ; set ZF = 0; after iret
+
+
+chk_paste:					; if pastechar, return it
+		cmp	pastechar,0
+		je	get_bios_char
+		mov	ax,pastechar
+		mov	pastechar,0
+		iret
+get_bios_char:					; get char from bios
+		pushf
+		callf	ad_int16
+		
+                cmp     ah,esckey               ; see if it is the plus key
+		je	plus_key_hit
+		iret	
+plus_key_hit:
+
+		mov	kbescflg,1	; else set keyboard escape flag
+		cmp	funcnum,-1	; skip gdos call if in int 21
+		jne	skip_gdos
+
+		int	GEM_INT		; call gdos
+
+		mov	ax,pastechar	; if a pastechar present, return it
+		cmp	ax,0
+		je	get_bios_char
+		mov	pastechar,0 
+
+		iret
+
+skip_gdos:	mov	ax,1c0dh	; send back cr to cause rexecution
+		iret			; of DOS function	
+
+
+;*****************************************************************
+				; routine to set the pastechar (cseg) variable
+public setpchar			; from 'C' code (ch.c) 
+setpchar:
+		push 	bp
+		mov	bp, sp
+		mov	ax, 4[bp]
+		mov	pastechar, ax
+		pop	bp
+		ret
+
+;*****************************************************************
+				; routine to set the esckey (cseg) variable
+public setescky			; from 'C' code (ch.c) 
+setescky:
+		push 	bp
+		mov	bp, sp
+		mov	al, 4[bp]
+		mov	esckey, al
+		pop	bp
+		ret
+
+;******************************************************************
+				; interrupt 21h handler
+public gd_int21
+gd_int21:
+		cmp	in_gdos,1	; prevent reentrancy
+		je	jmp_to_int_21
+		cmp	ah, 0
+		je	jmp_to_int_21
+		cmp	ah,4ah
+		jbe	chk_0ah		; if function = 0 or > 4ah pass on 
+		
+jmp_to_int_21:	jmpf	ad_int21
+
+chk_0ah:	cmp	ah,0ah		; if dos function 0ah get and save
+		jne	prepare_to_call_int21  ; cursor postion
+		push	ax		; for DOS func 0ah get current
+		push	bx		; cursor position
+		push	cx
+		push	dx
+		
+		mov	ah,3		; call bios for cursor position
+		mov	bh,0
+		int	10h 
+
+		mov	cpos_0ah,dx	; put cursor position in cpos_0ah
+		pop	dx
+		pop	cx
+		pop	bx
+		pop	ax
+prepare_to_call_int21:
+		mov	funcnum,ax
+
+; new 9-22-86		; restore entry flags
+push bp
+mov bp,sp
+push ax
+mov ax,6[bp]
+push ax
+popf
+pop ax
+pop bp
+
+
+		pushf	
+		callf	ad_int21	; call DOS
+		pushf			; save DOS return flags
+		cmp	kbescflg, 0	; check if keyboard escape flag set
+		je	int21ret	; if not set, return
+		push	ax		; save the DOS return ax
+		mov	ax,funcnum	; save funcnum over context switch
+		push	ax
+		cmp	ah,0ah		; if DOS func 0ah, remove user data -
+		jne	call_gdos	; after prompt
+		call	fix_prompt
+call_gdos:	mov	funcnum,-1	; clear funcnum over possible cntxt sw
+		mov	kbescflg, 2	; 2 means gdos called from DOS int21  
+		int	GEM_INT		; call gdos
+		pop	funcnum		; restore funcnum after context switch
+		mov	ax,funcnum		
+		cmp	ah,06h		; don't rexecute DOS func 06h
+		je	pop_and_return
+		cmp	ax,0c06h	; don't rexecute DOS func 0c06h
+		je	pop_and_return
+
+		pop	ax		; remove DOS return ax
+		mov	ax,funcnum		
+		popf			; remove DOS return flags
+		jmp	chk_0ah
+					; rexecute DOS command
+
+pop_and_return: pop	ax 		; restore DOS return value
+int21ret:	mov	funcnum,-1
+		popf			; restore DOS return flags
+		retf	2
+
+;**********************************************************************
+fix_prompt:			; for DOS func 0ah, erase text after prompt 
+		push	ax		
+		push	bx
+		push	cx
+		push	dx
+					; use bios to set cursor position
+		mov	ah,2h		; set cursor position after prompt
+		mov	dx,cpos_0ah	; use saved cursor position
+		mov	bh,0
+		int	10h
+
+		mov	ah,9h		; use bios to blank text after prompt
+		mov	bh,0
+		mov	cx,80d
+		mov	al,20h
+		mov	bl,07h
+		int	10h
+		
+		pop	dx
+		pop	cx
+		pop	bx
+		pop	ax	
+		ret		
+

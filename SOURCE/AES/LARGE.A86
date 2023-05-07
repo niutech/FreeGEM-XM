@@ -1,0 +1,299 @@
+;/*	LARGE.A86	2/3/84 - 06/10/85	Lee Jay Lorenzen	*/
+;/*     for Lattice C ==>  AX=HI, BX=LO
+;
+;
+;
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*                  Historical Copyright  
+;*	-------------------------------------------------------------
+;*	GEM Application Environment Services		  Version 3.0
+;*	Serial No.  XXXX-0000-654321		  All Rights Reserved
+;*	Copyright (C) 1986			Digital Research Inc.
+;*	-------------------------------------------------------------
+;*/
+;
+	cseg
+;
+	PUBLIC	HW
+	PUBLIC  LHIWD
+	PUBLIC	LSTRLEN
+	PUBLIC	LSTCPY
+	PUBLIC	ADDR
+	PUBLIC	LLDS
+	PUBLIC	LLCS
+	PUBLIC	LLSS 
+	PUBLIC	LWCOPY
+	PUBLIC	LBCOPY
+	PUBLIC	LBGET
+	PUBLIC	LBSET
+	PUBLIC	LWGET
+	PUBLIC	LWSET
+	PUBLIC	LLGET
+	PUBLIC	LLSET
+	PUBLIC	LBWMOV
+;
+;		LONG
+;	HW(WORD)	
+;						/* coerce short word to	*/
+;						/*   high word  of long	*/
+;#define HW(x) ((LONG)((UWORD)(x)) << 16)
+;
+HW:
+	pop	dx			;pop return address
+	pop	ax			; pop value into segment reg
+	xor 	bx,bx			; clear offset reg
+	push	dx			;push return address
+	ret
+;
+;		WORD
+;	LHIWD(aLONG)
+;						/* return high word of	*/
+;						/*   a long value	*/
+;#define LHIWD(x) ((UWORD)(x >> 16))
+;
+LHIWD:
+	pop	dx			;pop return address
+	pop	ax			; pop offset
+	pop	ax			; pop segment
+	push	dx			;push return address
+	ret
+;
+;		WORD
+;	LSTRLEN(long_addr)
+;
+LSTRLEN:
+	push	bp
+	mov	bp,sp
+	cld
+	les	di,4[bp]		; destination string offset
+	mov	bx,di 			; remember start of string
+	xor	ax,ax			; look for a null
+	mov	cx,7fffh
+	repnz	scasb
+	mov	ax,di
+	sub	ax,bx
+	dec	ax
+	pop	bp
+	ret
+;
+;		LONG
+;	ADDR(shrt_addr)
+;
+ADDR:
+	pop	ax			; pop return
+	pop	bx			; pop low word of addr
+	push	ax			; push return
+	mov	ax,ds			; set hi word of addr
+	ret				; return
+;
+;		LONG
+;	LLDS()
+;
+;
+LLDS:
+	xor bx,bx
+	mov ax,ds
+	ret
+;
+;		LONG
+;	LLCS()
+;
+;
+LLCS:
+	xor bx,bx
+	mov ax,cs
+	ret
+;
+;		LONG
+;	LLSS()
+;
+;
+LLSS:
+	xor bx,bx
+	mov ax,ss
+	ret
+;
+;	LWCOPY(pdstoff, pdstseg, psrcoff, psrcseg, numwds)
+;
+;
+LWCOPY:
+	push	bp
+	mov	bp,sp
+	push	ds
+	cld
+	les	di,4[bp]		; dest off
+	lds	si,8[bp]		; src off
+	mov	cx,12[bp]		; count
+	rep	movsw
+	pop	ds
+	pop	bp
+	ret
+;
+;
+;	LBCOPY(pdstoff, pdstseg, psrcoff, psrcseg, numbytes)
+;
+;
+LBCOPY:
+	push	bp
+	mov	bp,sp
+	push	ds
+	cld
+	les	di,4[bp]		; dest off
+	lds	si,8[bp]		; src off
+	mov	cx,12[bp]		; count
+	rep	movsb
+	pop	ds
+	pop	bp
+	ret
+;
+;	expand from bytes to words until you hit a null also return
+;	the number of characters moved
+;
+;	LBWMOV(pdstoff, pdstseg, psrcoff, psrcseg)
+;
+;
+LBWMOV:
+	push bp
+	mov	bp,sp
+	push	ds
+	cld			; assume forward
+	les	di,4[bp]	; dest off
+	lds	si,8[bp]	; src off
+	mov	cx,0		; count
+	mov	ah,0
+lbw_loop:
+	lodsb
+	cmp	al,0
+	je	lbw_done
+	inc	cx
+	stosw
+	jmp	lbw_loop
+lbw_done:
+	mov	ax,cx
+	pop	ds
+	pop	bp
+	ret
+;
+;	copy from src to dest until and including a null in the 
+;	source string
+;
+;	len = LSTCPY(pdstoff, pdstseg, psrcoff, psrcseg)
+;
+;
+LSTCPY:
+	push	bp
+	mov	bp,sp
+	push	ds
+	cld			; assume forward
+	les	di,4[bp]	; dest off & seg
+	lds	si,8[bp]	; src off & seg
+	mov	cx,0		; count
+	mov	ah,0
+lsc_loop:
+	lodsb
+	cmp	al,0
+	je	lsc_done
+	inc	cx
+	stosb
+	jmp	lsc_loop
+lsc_done:
+	stosb
+	mov	ax,cx
+	pop	ds
+	pop	bp
+	ret
+;
+;		UBYTE
+;	LBGET(lp)
+;		LONG		p;
+;
+LBGET:
+	pop	dx		;pop return
+	pop	bx		; pop offset
+	pop	es		; pop segment
+	push	dx		;push return
+	xor	ah, ah
+	mov	al,es:[bx]
+	ret
+;
+;		UBYTE
+;	LBSET(lp, abyte)
+;		LONG		p;
+;		BYTE		abyte;
+;
+LBSET:
+	pop	dx		;pop return
+	pop	bx		; pop offset
+	pop	es		; pop segment
+	pop	ax		; pop the value
+	push	dx		;push return
+	mov	es:[bx],al
+	ret
+;
+;		UWORD
+;	LWGET(lp)
+;		LONG		p;
+;
+LWGET:
+	pop	dx		;pop return
+	pop	bx		; pop offset
+	pop	es		; pop segment
+	push	dx		;push return
+	mov	ax,es:[bx]
+	ret
+;
+;		UWORD
+;	LWSET(lp, aword)
+;		LONG		p;
+;		WORD		aword;
+;
+LWSET:
+	pop	dx		;pop return
+	pop	bx		; pop offset
+	pop	es		; pop segment
+	pop	ax		; pop the value
+	push	dx		;push return
+	mov	es:[bx],ax
+	ret
+;
+;		ULONG
+;	LLGET(lp)
+;		LONG		p;
+;
+LLGET:
+	pop	dx		;pop return
+	pop	di		; pop offset
+	pop	es		; pop segment
+	push	dx		;push return
+	mov	bx,es:[di]
+	inc	di
+	inc	di
+	mov	ax,es:[di]
+	ret
+;
+;		ULONG
+;	LLSET(lp, along)
+;		LONG		p;
+;		LONG		along;
+;
+LLSET:
+	pop	dx		;pop return
+	pop	di		; pop offset
+	pop	es		; pop segment
+	pop	bx		; pop lo value
+	pop	ax		; pop hi value
+	push	dx		;push return
+	mov	es:[di],bx	; store lo value
+	inc	di
+	inc	di
+	mov	es:[di],ax	; store hi value
+	ret
+
+
+	end
+
+	

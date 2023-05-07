@@ -1,0 +1,6 @@
+GEM XM 3.0 M.R.S
+18th Nov 86
+AES Sources
+*.h, *.a86, *.bat, Resource
+
+

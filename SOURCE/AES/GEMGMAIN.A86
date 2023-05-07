@@ -1,0 +1,37 @@
+;/*	GEMGMAIN.A86		4/18/84 - 06/07/85	Lee Lorenzen	*/
+;
+;
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*                  Historical Copyright  
+;*	-------------------------------------------------------------
+;*	GEM Application Environment Services		  Version 3.0
+;*	Serial No.  XXXX-0000-654321		  All Rights Reserved
+;*	Copyright (C) 1986			Digital Research Inc.
+;*	-------------------------------------------------------------
+;*/
+;
+;
+;
+	CSEG
+	PUBLIC		gomain
+	PUBLIC		terminate
+	extrn		main:near
+;
+;
+;	go to the application
+;
+gomain:
+	call	main
+;
+;	go back to dos
+;
+terminate:
+	mov	ax,04c00h
+	int	21h
+;
+	end
+

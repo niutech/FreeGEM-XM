@@ -1,0 +1,25 @@
+--------------------------------------------------
+LINK-86 Linkage Editor                 Version 1.3
+Serial No. 3156-0000-001485    All Rights Reserved
+Copyright (C) 1982-1984     Digital Research, Inc.
+--------------------------------------------------
+
+Undefined            Referenced in
+Symbol           File           Module
+------           ----           ------
+
+KBESCFLG         C:GDOS.OBJ     GDOS
+GL_CURSS         C:GDOS.OBJ     GDOS
+IN_GDOS          C:GDOS.OBJ     GDOS
+CH_ENTRY         C:GDOS.OBJ     GDOS
+GL_CURSP         C:GDOS.OBJ     GDOS
+CH_END           C:LOAD.OBJ     LOAD
+REST_INTS        C:LOAD.OBJ     LOAD
+CHG_INTS         C:LOAD.OBJ     LOAD
+CH_START         C:LOAD.OBJ     LOAD
+
+CODE    01D98
+DATA    00225
+STACK   002EE
+
+USE FACTOR:  03%

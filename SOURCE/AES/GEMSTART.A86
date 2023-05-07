@@ -1,0 +1,276 @@
+;/*	GEMSTART.A86		4/18/84 - 06/07/85	Lee Lorenzen	*/
+;/*	GEM30			12/17/85		Lowell Webster	*/
+;
+;
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*                  Historical Copyright  
+;*	-------------------------------------------------------------
+;*	GEM Application Environment Services		  Version 3.0
+;*	Serial No.  XXXX-0000-654321		  All Rights Reserved
+;*	Copyright (C) 1986			Digital Research Inc.
+;*	-------------------------------------------------------------
+;*/
+;
+	dseg
+	PUBLIC	gintstk
+	PUBLIC	pgmld
+	extrn	PROGEND:word
+	extrn	PARABEG:word
+	extrn	ad_s1fcb:word			; actually longs
+	extrn	ad_s2fcb:word			; actually longs
+	extrn	ad_stail:word			; actually longs
+	extrn	ad_envrn:word			; actually longs
+	extrn	ad_psp:word			; actually longs
+	extrn	D:word				; static data, gl_uda 1st
+;
+;
+parmblk	dw	0,0	; for load overlay function
+hdrbuf	rb	20h
+;
+MEMAMT	equ	5000h	; number of paragraphs above aes needed for 3.0
+			; MEMAMT + # paras avail should be > 512K.
+;
+	cseg
+	PUBLIC	start
+	extrn	gomain:near
+	extrn	terminate:near
+	extrn	sizeglo:near
+	extrn	sizeuda:near
+;
+;	get a stack to use
+;
+start:
+	cli
+	mov	bx,es			; save psp
+	mov	ax,seg D
+	mov	ds,ax
+	mov	ss,ax
+	mov	es,ax
+	mov	sp, offset stk		; temp stack
+;
+	call	sizeuda			; get sizeof uda - 2
+	add	ax, offset D		; add to beginning of global array
+	mov	sp, ax			; real stack
+;
+; zero out static uninitialized data
+;
+	call    sizeglo			; get size of structure
+	mov	dx, ax			; save it 
+	inc	ax
+	shr	ax, 1			; make number of words
+	mov     cx, ax
+	xor	ax,ax
+	mov	di,offset D		; es:di points to beg of D
+	cld
+	rep	stosw			; clear D out
+	mov	es,bx			; get psp back
+	sti
+;
+;	free up any memory we're not using
+;		when we start es has our psp segment
+;
+	mov	ax, es			;with no prefix our PSP is es
+	mov	PARABEG,ax
+	mov	bx,0			;get our psp address
+	mov	ad_psp+2, ax
+	mov	ad_psp, 0000
+	MOV	AX, ES:word ptr 2Ch[bx]
+	mov	ad_envrn+2, ax
+	mov	ad_envrn, 0000
+					; get command tail from psp
+	mov	ax,es
+	mov	ad_s1fcb,5ch
+	mov	ad_s1fcb+2,ax
+	mov	ad_s2fcb,6ch
+	mov	ad_s2fcb+2,ax
+	mov	ad_stail,80h
+	mov	ad_stail+2,ax
+;
+;	shrink down freeing extra load memory
+;
+memshrnk:
+	mov	ax, dx			; get size of D
+	add	ax,offset PROGEND	; add in end of program
+	add	ax,15
+	mov	cl,4
+	shr	ax,cl
+	mov	cx,ax			; cx = our data size in paragraphs
+	mov	bx,ds
+	add	bx,cx			; bx = last used paragraph in image
+	mov	ax,PARABEG
+	mov	es,ax
+	sub	bx,ax			; bx = # of paras to shrink to 
+	mov	ah,4ah
+	int	21h
+	mov	dx,offset memerrmsg
+	jc	errormsg		; error
+;
+; check for enough memory to run
+;
+enufmem:
+	mov	ah, 48h			; memory allocate
+	mov	bx, 0ffffh		; force a fail
+	int	21h
+	mov	ax, MEMAMT
+	mov	dx, offset m2errmsg
+	cmp	ax, bx			; do we have enough?
+	jg	errormsg		; no
+	
+;
+;	set up uda
+;
+setuda:	
+	mov	bx,offset D
+	mov	ax,ss
+	mov	04[bx],ax
+	mov	ax,sp
+	mov	02[bx],ax
+;
+; check for presence of GEMVDI before calling the application
+;
+	push	es
+	xor	ax,ax
+	mov	es,ax
+	mov	bx,es:.3bch
+	mov	ax,es:.3beh
+	mov	es,ax
+	mov	di,2
+	add	di,bx
+	mov	si,offset gemvdimsg
+	mov	cx,6
+	rep	cmpsb
+	pop	es
+	jz	runapplication
+	mov	dx,offset gemvdimsg
+errormsg:
+	mov	ah,9
+	int	21h
+	mov	dx,offset terminmsg
+	mov	ah,9
+	int	21h
+	jmp	terminate
+;
+;
+;
+runapplication:
+	mov	ax,ds
+	jmp	gomain
+;
+;
+;
+;
+;		WORD
+;	pgmld(handle, ploadname, pldaddr, paccroom)
+;		WORD		handle;
+;		BYTE		*ploadname;
+;		LONG		*pldaddr;
+;		WORD		*paccroom;
+;
+pgmld:
+	push	bp
+	mov	bp,sp
+	push	ds
+	push	es
+	mov	ax,ds
+	mov	es,ax
+	mov	bx,4[bp]		; file handle
+	mov	cx,1ch			; file header size
+	mov	dx,offset hdrbuf	; buffer for header
+	mov	ah,3fh			; read file
+	int	21h
+	cmp	ax,1ch			; get 'em all ?
+	jz	norderr
+rderr:
+					; read error so error out
+	pop	es
+	pop	ds
+	pop	bp
+	mov	ax,-1
+	ret
+norderr:
+					; calculate size of desk acc.
+	mov	ax,word ptr hdrbuf+2
+	add	ax,15
+	mov	cl,4
+	shr	ax,cl
+	mov	bx,ax			; bx = paras in (image mod 512)
+	mov	ax,word ptr hdrbuf+4
+	mov	cl,5
+	shl	ax,cl			; ax = paras in (image div 512)
+	add	ax,bx			; ax = paras in image
+					; check accessory room here
+	mov	bx, 10[bp]
+	mov	cx, word ptr [bx]	; cx = accessory room left (paras)
+	sub	cx, ax
+	jb	lderr			; check fit
+	mov	word ptr [bx], cx	; cx = store back acc room
+
+					; allocate memory here
+	mov	bx,ax
+	mov	ax,04800h
+	int	21h
+	jc	lderr
+					; return load address
+	mov	bx, 8[bp]
+	mov	word ptr [bx], 0	; offset of load
+	mov	word ptr 2[bx], ax	; segment of load
+					; set up parm block
+	mov	bx,offset parmblk
+	mov	word ptr [bx],ax
+	mov	word ptr 2[bx],ax
+					; do the load overlay
+	mov	dx,6[bp]		; ds:dx has load name
+	mov	bx,offset parmblk	; es:bx has parm block
+	mov	ax,4b03h
+	push	ds
+	int	21h
+	pop	ds
+	jc	lderr
+	xor	ax,ax
+	pop	es
+	pop	ds
+	pop	bp
+	ret
+lderr:
+	mov	ax,-1
+	pop	es
+	pop	ds
+	pop	bp
+	ret
+;
+;
+;
+	sseg
+	rw	16
+stk	dw	0
+;
+;
+	dseg
+copyrt	db	'GEM Application Environment Services     Version 3.0'
+	db	'Serial No.  XXXX-0000-654321     All Rights Reserved'
+	db	'Copyright (C) 1986             Digital Research Inc.'
+	db	'12/17/85'
+;
+gemvdimsg db	'GEMVDI not present in memory.'
+	db	'$'
+;
+memerrmsg db	'Unable to free memory.'
+	db	'$'
+;
+m2errmsg db	'GEM 3.0 needs 512K or more of memory.'
+	db	'$'
+;
+terminmsg db	0dh,0ah
+	db	'Execution terminated.'
+	db	'$'
+;
+;
+gintstk dw	0
+;
+;
+	end
+

@@ -1,0 +1,102 @@
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*/
+	cseg
+
+extrn	ad_int16:dword
+
+public cnt_blks		; WORD cnt_blks(addr, len) LONG addr; WORD len;
+cnt_blks:		; counts blanks in screen buffer at a given 
+	push	bp	; address and length. Looks at every over byte  
+	mov	bp,sp	; starting at input addr (skiping attribute byes)
+	mov	di,4[bp]
+	mov	es,6[bp]
+	mov     cx,8[bp]
+	shr	cx,1
+	mov	ax,0
+
+cnt_blks_loop:
+	cmp	es:byte ptr [di], 20h	; see if char is a blank
+
+	jne	cnt_blks_skip_inc		 
+	inc	ax	
+cnt_blks_skip_inc:
+
+	inc	di			; move to next char
+	inc	di
+	loop	cnt_blks_loop
+ 
+	pop	bp
+	ret
+
+public bio_kb		; WORD bio_kb(ax) WORD ax;
+bio_kb:			; gets character/attribute from keyboard buffer using
+	push	bp	; bios
+	mov	bp,sp
+	mov	ax,4[bp]
+	pushf
+	callf	ad_int16 
+	pop	bp
+	ret
+
+
+public vd_gmode		; WORD vd_gmode();
+vd_gmode:		; gets video mode using bios int 10h/function 0fh
+	push	bp
+	mov	bp,sp
+	mov	ah,0fh	
+	int	10h 
+	pop	bp
+	ret
+
+public vd_scpos		; WORD vd_scpos(bh,dx) WORD bh,dx;
+vd_scpos:		; sets cursor position using bios int 10h/function 02h
+	push	bp
+	mov	bp,sp
+	mov	ah,2
+	mov	bh,4[bp]
+	mov	dx,6[bp]
+	int	10h 
+	pop	bp
+	ret
+
+public vd_gcpos		; WORD vd_gcpos(bh) WORD bh;
+vd_gcpos:		; gets cursor position using bios int 10h/function 03h
+	push	bp
+	mov	bp,sp
+	mov	ah,3
+	mov	bh,4[bp]
+	int	10h 
+	mov	ax,dx
+	pop	bp
+	ret
+
+public dos_pars		; BYTE dos_parsefilename(string,fcb,mode) 
+			; LONG string, fcb; BYTE mode;
+dos_pars:		; C binding to DOS int21/function 29h, parse filename 
+	push	bp
+	mov	bp,sp
+	mov	ah,29h
+	mov	si,4[bp]
+	mov	ds,6[bp]
+	mov	di,8[bp]
+	mov	es,10[bp]
+	mov	al,12[bp]
+	int	21h 
+	mov	ah,0
+	pop	bp
+	ret
+
+public callfar			; callfar(addr, pid) LONG addr; WORD pid;
+callfar:			; used to do a call far to the code at
+	push	bp		; addr and puts the value of pid in ax
+	mov	bp,sp
+	mov	ax,8[bp]
+	callf	dword ptr 4[bp]
+	pop	bp
+	ret
+
+

@@ -1,0 +1,14 @@
+01 IBMVGAP9; IBM Video Graphics Array Card & Display (640x480) 16 colors
+; Microsoft Bus Mouse ( Uses MOUSE.COM )
+; No communication port selected
+  IBMHSS07.FNT; IBM 640 x 350 Swiss 7 Point
+  IBMHSS10.FNT; IBM 640 x 350 Swiss 10 Point
+  IBMHSS14.FNT; IBM 640 x 350 Swiss 14 Point
+  IBMHSS18.FNT; IBM 640 x 350 Swiss 18 Point
+  IBMHSS36.FNT; IBM 640 x 350 Swiss 36 Point
+  IBMHTR07.FNT; IBM 640 x 350 Dutch 7 Point
+  IBMHTR10.FNT; IBM 640 x 350 Dutch 10 Point
+  IBMHTR14.FNT; IBM 640 x 350 Dutch 14 Point
+  IBMHTR18.FNT; IBM 640 x 350 Dutch 18 Point
+  IBMHTR36.FNT; IBM 640 x 350 Dutch 36 Point
+31 METAFIL6;GEM File

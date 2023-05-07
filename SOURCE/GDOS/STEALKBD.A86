@@ -1,0 +1,153 @@
+;	STEALKBD.A86		1/24/86				MDF
+;
+;
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*/
+;
+;
+;
+	cseg
+;
+it16_of	dw	0
+it16_sg	dw	0
+;
+;
+;
+	PUBLIC		take_kbd
+	PUBLIC		rest_kbd
+	EXTRN		dp_kbint:near
+	EXTRN		gdos_ds:word
+;
+;
+;
+	cseg
+;
+;
+take_kbd:
+	push	bp
+	mov	bp,sp
+	push	es
+	push	ds
+	mov	al,016h			
+	mov	ah,035h
+	int	021h			; get interrupt 16 in es:bx
+	mov	it16_sg,es		; save them
+	mov	it16_of,bx
+	mov	ah,025h
+	mov	dx,cs
+	mov	ds,dx
+	mov	dx,cs:offset	handl_kbd
+	int	021h			; change to our keyboard routine
+	pop	ds
+	pop	es
+	pop	bp
+	ret
+;
+;
+rest_kbd:
+	mov	bx, es
+	xor	ax, ax
+	mov	es, ax	
+	mov	ax, cs:it16_of
+	mov	es: word ptr .58h, ax
+	mov	ax, cs:it16_sg
+	mov	es: word ptr .60h, ax
+	mov	es, bx
+	ret
+
+
+
+;	push	bp
+;	mov	bp,sp
+;	push	ds
+;	mov	al,016h			; set up to change interrupt 16
+;	mov	ah,025h
+;	mov	dx,it16_of
+;	mov	ds,it16_sg		; address of original handler
+;	int	021h	
+;	pop	ds
+;	pop	bp
+;	ret
+;
+;
+	dseg
+;
+;
+	rw	128
+intstk	dw	0
+;
+;
+	cseg
+;
+ss_save	dw	0
+sp_save	dw	0
+ax_save	dw	0
+cx_save	dw	0
+dx_save dw	0
+kb_rent dw	0
+;
+	cseg
+;
+	
+;
+handl_kbd:
+	cmp	kb_rent,0
+	je	h1
+	mov	ax,1	
+	dec	ax
+	retf	2
+
+h1:	sti					; retore interrupts
+
+	mov	cs:ss_save,ss			; use local stack
+	mov	cs:sp_save,sp
+	mov	cs:ax_save,ax
+	mov	cs:cx_save,cx	
+	mov	cs:dx_save,dx
+	mov	sp,offset intstk
+	mov	ax,cs:gdos_ds
+	mov	ss,ax
+	push	bp
+	push	es
+	push	ds
+	push	bx
+	push	si
+	push	di
+
+	
+	inc	kb_rent
+
+	mov	ds,ax				; set up right DS
+
+	mov	ax,cs:ax_save
+	mov	al,ah				; put in low byte
+	xor	ah,ah				; clear high byte
+	mov	bp,sp
+	push	ax
+	call	dp_kbint			; get next paste char
+	mov	sp,bp
+	mov	cs:ax_save,ax			; save value for now
+	dec	kb_rent
+	mov	ax,2				; clear z flag for status
+	dec	ax
+
+	pop	di
+	pop	si
+	pop	bx
+	pop	ds
+	pop	es
+	pop	bp
+	mov	ax,cs:ss_save
+	mov	ss,ax
+	mov	sp,cs:sp_save
+	mov	cx,cs:cx_save
+	mov	dx,cs:dx_save
+	mov	ax,cs:ax_save			; return value
+	retf	2
+
+	end
+

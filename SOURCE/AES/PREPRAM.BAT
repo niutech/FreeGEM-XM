@@ -1,0 +1,10 @@
+copy *.c d:/v
+copy *.h d:/v
+copy *.a86 d:/v
+copy gem30.mke d:/v
+copy gem30.inp d:/v
+copy copyover.bat d:/v
+copy comp30.bat d:/v
+copy c:\system\link86.exe d:/v
+copy c:\system\rasm86.exe d:/v
+copy c:\system\lc*.* d:/v

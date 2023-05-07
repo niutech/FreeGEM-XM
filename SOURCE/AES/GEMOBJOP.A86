@@ -1,0 +1,468 @@
+;/*	GEMOBJOP.A86		12/06/84-02/08/85 	Don Heiskell	*/
+;/*
+;*       Copyright 1999, Caldera Thin Clients, Inc.                      
+;*       This software is licenced under the GNU Public License.         
+;*       Please see LICENSE.TXT for further information.                 
+;*                                                                       
+;*                  Historical Copyright  
+;*	-------------------------------------------------------------
+;*	GEM Application Environment Services		  Version 3.0
+;*	Serial No.  XXXX-0000-654321		  All Rights Reserved
+;*	Copyright (C) 1986			Digital Research Inc.
+;*	-------------------------------------------------------------
+;*/
+;
+;
+
+EXIT		equ	4
+DEFAULT		equ	2
+INDIRECT	equ	0100h
+;
+treeoff	equ	4
+treeseg	equ	6
+obj	equ	8
+pspec	equ	10
+pstate	equ	12
+ptype	equ	14
+pflags	equ	16
+pt	equ	18
+pth	equ	20	
+;
+ob_next		equ	0
+ob_head		equ	2
+ob_tail		equ	4
+ob_type		equ	6
+ob_flags	equ	8
+ob_state	equ	10
+ob_spec		equ	12
+ob_x		equ	16
+ob_y		equ	18
+ob_width	equ	20
+ob_height	equ	22
+;
+;
+;
+fld_off		equ	10
+;
+;
+cseg
+		public	obaddr
+;
+;	see GEMOBJOP.C
+;
+obaddr:
+	push	bp
+	mov	bp,sp
+	push	es
+	les	di,treeoff[bp]	;load the offset and seg of tree
+	mov	ax, obj[bp]	;get the obj index
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1		;find obj * 8 * 3
+	add	di,ax
+	add	di,ax
+	add	di,ax		;find tree offset + ( 24 * obj )
+	mov	bx, fld_off[bp]
+	add	bx, di		; add in field offset
+	mov	ax,es
+	pop	es
+	pop	bp
+	ret
+;
+;
+;
+		public	ob_sst
+;
+;	see GEMOBJOP.C
+;
+ob_sst:
+	push	bp
+	mov	bp,sp
+	push	es
+	les	di,treeoff[bp]	;load the offset and seg of tree
+	mov	ax, obj[bp]	;get the obj index
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1		;find obj * 8 * 3
+	add	di,ax
+	add	di,ax
+	add	di,ax		;find tree offset + ( 24 * obj )
+;pt->g_w = tmp.obj_width
+	mov	si,pt[bp]	;get the pointer to pt[x,y,w,h]
+	mov	ax,es:ob_width[di]	;get the width
+	mov	4[si], ax		;store the width off pt
+;pt->g_h = tmp.obj_height
+	mov	ax,es:ob_height[di]	;get the height
+	mov	6[si], ax		;store the height off pt
+;*pflags = tmp.ob_flags
+	mov	si,pflags[bp]		;get the pfags pointer
+	mov	ax,es:ob_flags[di]	;get pflags data
+	mov	[si],ax			;store the data
+; if (*plags & INDIRECT )
+;     *pspec = LLGET( tmp.ob_spec )
+; else
+;     *pspec = tmp.ob_spec		
+	mov	si,pspec[bp]		;get the pspec dest ptr
+	and	ax, INDIRECT		
+	mov	ax,es:ob_spec+2[di]	; if not indirect then *pspec = ob_spec
+	mov	bx,es:ob_spec[di]
+	jz	not_indirect
+	push	es			; if indirect then *pspec=[ob_spec]
+	mov	es,ax
+	mov 	ax,es:2[bx]
+	mov	bx,es:[bx]
+	pop	es
+not_indirect:
+	mov	[si], bx		; *pspec = offset of ob_spec
+	mov	2[si], ax		; *pspec+2 = segment of ob_spec
+	mov	dx, ax			; save segment of pspec
+; *pstate = tmp.ob_state
+	mov	si,pstate[bp]		; get the ptstate pointer
+	mov	ax, es:ob_state[di]	; get the state data
+	mov	[si], ax
+; *ptype = tmp.ob_type & 0x00ff
+	mov	si, ptype[bp]		; get the ptype pointer
+	mov	bx, es:ob_type[di]
+	and	bx, 00ffh
+	mov	[si], bx
+; th = 0
+	xor	cx,cx			; cx = th = 0
+; switch( *ptype )
+	sub	bx,20			; make it 0 relative
+	jc	ob_below_20
+	cmp	bx, 12
+	jg	ob_below_20 
+	shl	bx,1
+	call	ob_case[bx]
+; if (th >128 )
+;     th -= 256
+ob_below_20:
+	cmp	cx, 128
+	jle	th_less_th_128
+	sub	cx, 256
+th_less_th_128:
+; *pth = th
+	mov	si,pth[bp]
+	mov	[si], cx
+;return LBYTE3 ( pspec )
+	xor	ax,ax
+	mov	al,dh
+	pop	es
+	pop	bp
+	ret	
+; case G_TITLE
+;	th = 1
+;	break
+G_TITLE:
+	inc	cx		;make cx = 1
+	ret
+; case G_TEXT
+;	th = LWGET( *pspec + 22 )
+;	break
+G_TEXT:
+	mov	si,pspec[bp]	; get pspec pointer
+	push	es
+	les	bx, [si]	; get the long pointer
+	mov	cx, es:22[bx]
+	pop	es
+	ret
+; case G_BOX
+;	th = LBYTE2(pspec)
+;	break
+G_BOX:
+	mov	cl,dl
+	ret
+; case G_BUTTON
+;	th--
+;	if ( *pflags & EXIT )
+;	    th--
+;	if ( *pflags & DEFAULT )
+;	    th--
+;	break
+G_BUTTON:
+	dec	cx
+	mov	si,pflags[bp]
+	mov	ax, [si]
+	test	ax, EXIT
+	jz	exit_not_set
+	dec	cx
+exit_not_set:
+	test	ax, DEFAULT
+	jz	default_not_set
+	dec	cx
+default_not_set:
+	ret
+; case G_USERDEF
+;	break
+;
+G_USERDEF:
+	ret
+
+dseg
+ob_case	dw	offset	G_BOX		;G_BOX OBJECT
+	dw	offset	G_TEXT		;G_TEXT OBJECT
+	dw	offset	G_TEXT		;G_BOX TEXT OBJECT
+	dw	offset	G_USERDEF	;G_IMAGE OBJECT
+	dw	offset	G_USERDEF	;G_USERDEF OBJECT
+	dw	offset	G_BOX		;G_IBOX OBJECT
+	dw	offset	G_BUTTON	;G_BUTTON OBJECT
+	dw	offset	G_BOX		;G_BOXCHAR OBJECT
+	dw	offset	G_USERDEF	;G_STRING OBJECT
+	dw	offset	G_TEXT		;G_FTEXT OBJECT
+	dw	offset	G_TEXT		;G_FBOXTEXT OBJECT
+	dw	offset	G_USERDEF	;G_ICON OBJECT
+	dw	offset	G_TITLE		;G_TITLE OBJECT
+	dw	offset	G_USERDEF	;G_NO OBJECT
+	dw	offset	G_USERDEF	;G_NO OBJECT
+	dw	offset	G_USERDEF	;G_NO OBJECT
+;
+;
+HIDETREE	equ	0080h
+;
+;
+this	equ	8
+llast	equ	10
+routine	equ	12
+startx	equ	14
+starty	equ	16
+maxdep	equ	18
+;
+cseg
+		public	everyobj
+;
+;
+;
+exit_everyobj:
+	pop	es
+	pop	bp
+	ret
+everyobj:
+	push	bp
+	mov	bp,sp
+	push	es
+;x[0] = startx
+	mov	ax, startx[bp]
+	mov	x, ax
+;y[0] = starty
+	mov	ax, starty[bp]
+	mov	y, ax
+;convert max depth to compare with depth, a word ptr
+	mov	bx, maxdep[bp]
+	shl	bx,1
+	mov	maxdep[bp], bx
+;depth = 1
+	mov	bx, 2		; bx = depth = 1
+	mov	dx, this[bp]	; dx = this
+	les	si,treeoff[bp]	;load the offset and seg of tree
+	mov	di, si
+	mov	ax, dx
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1		;find obj * 8 * 3
+	add	di,ax
+	add	di,ax
+	add	di,ax		;find tree offset + ( 24 * this )
+;child:
+;if ( this == llast )
+;    return
+child:
+	cmp	dx, llast[bp]
+	jz	exit_everyobj
+;x[depth] = x[depth-1] + lwget( ob_x( this ) )
+	mov	ax,es:ob_x[di]
+	add	ax, x-2[bx]
+	mov	x[bx], ax
+;y[depth] = y[depth-1] + lwget( ob_y( this ))
+	mov	ax,es:ob_y[di]
+	add	ax, y-2[bx]
+	mov	y[bx], ax
+;(*routine) (tree, this, x[depth], y[depth] )	
+	push	di		; save current ob ptr
+	push	bx		; save depth
+	push	word ptr y[bx]
+	push	word ptr x[bx]
+	push	dx
+	push	es
+	push	si
+	mov	bx, routine[bp]
+	call	bx
+	pop	si
+	pop	es
+	pop	dx
+	pop	ax
+	pop	ax
+	pop	bx
+	pop	di
+;tmp1 = lwget( ob_head( this ))
+	mov	cx, es:ob_head[di]
+;if ( tmp1 != NIL )
+	mov	ax, cx
+	inc	ax
+	jz	sibling
+;if ( !(lwget ( ob_flags(this)) & hidetree ) &&
+;		( depth <= maxdep ) )
+	mov	ax, es:ob_flags[di]
+	and	ax, HIDETREE
+	jnz	sibling
+	cmp	bx, maxdep[bp]
+	jg	sibling
+; depth++
+; this = tmp1;
+; goto child
+	inc	bx
+	inc	bx
+	mov 	dx, cx
+	mov	di, si			;update di to eq tree offset
+	mov	ax, dx
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1		;find obj * 8 * 3
+	add	di,ax
+	add	di,ax
+	add	di,ax		;find tree offset + ( 24 * this )
+	jmps	child
+;sibling:		
+sibling:
+;tmp1 = lwget( ob_next( this )
+	mov	di, si			;update di to eq tree offset
+	mov	ax, dx
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1		;find obj * 8 * 3
+	add	di,ax
+	add	di,ax
+	add	di,ax		;find tree offset + ( 24 * this )
+sibling_1:
+	mov	cx, es:ob_next[di]
+;if ( (tmp1 == llast) || (this == ROOT ) )
+;    return
+	cmp	cx, llast[bp]
+	jz	everyobj_exit
+	cmp	dx, 0
+	jz	everyobj_exit
+;if ( lwget( ob_tail( tmp1)) != this )
+;    this = tmp1
+;    goto child
+	mov	di, si			;update di to eq tree offset
+	mov	ax, cx
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1		;find obj * 8 * 3
+	add	di,ax
+	add	di,ax
+	add	di,ax		;find tree offset + ( 24 * this )
+	mov	ax, es:ob_tail[di]
+	cmp	ax, dx
+	mov	dx, cx
+	jz	sibling_loop
+	jmp	child
+;depth--
+;this = tmp1
+;goto sibling
+sibling_loop:
+	dec	bx
+	dec	bx
+	jmps	sibling_1
+everyobj_exit:
+	pop	es
+	pop	bp
+	ret
+dseg
+x	rw	8
+y	rw	8
+;
+;
+;treeoff	equ	4
+;treeseg	equ	6
+;obj		equ	8
+pnobj		equ	10
+;
+cseg
+	public		get_par
+;
+;
+;
+get_par:
+	push	bp
+	mov	bp,sp
+	push	es
+	mov	dx, obj[bp]		; dx = obj
+	les	si,treeoff[bp]		;load the offset and seg of tree
+;
+;pobj = obj;
+;
+	mov	bx, dx			; bx = pobj
+;
+;nobj = NIL;
+;
+	mov	cx, 0ffffh
+;
+;if (obj == ROOT)
+;  pobj = NIL;
+;
+	cmp	dx, 0
+	jnz	gp_do
+	mov	bx, 0ffffh
+	jmp	gp_done
+;
+;else
+;  do
+;  {
+;    obj = pobj;
+;
+gp_do:
+	  mov	dx, bx
+;
+;	  pobj = LWGET(OB_NEXT(obj));
+;
+	mov	di, si
+	mov	ax, dx
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1		;find obj * 8 * 3
+	add	di,ax
+	add	di,ax
+	add	di,ax		;find tree offset + ( 24 * this )
+	mov	bx,es:ob_next[di]	;bx = pobj
+;
+;	  if (nobj == NIL)
+;	    nobj = pobj;
+;
+	cmp	cx, 0ffffh
+	jne	gp_tailchk
+	mov	cx, bx
+;
+; } while ( (LWGET(OB_TAIL(pobj)) != obj) );
+;
+gp_tailchk:
+	mov	di, si
+	mov	ax, bx
+	shl	ax,1
+	shl	ax,1
+	shl	ax,1		;find obj * 8 * 3
+	add	di,ax
+	add	di,ax
+	add	di,ax		;find tree offset + ( 24 * this )
+	mov	ax,es:ob_tail[di]	;ax = tmpobj
+	cmp	ax, dx
+	jz	gp_done
+	jmp	gp_do
+;
+;
+gp_done:
+;
+;return(pobj);
+;
+	mov	ax, bx
+;
+;*pnobj = nobj;
+;
+	mov	bx, pnobj[bp]
+	mov	[bx], cx
+	pop	es
+	pop	bp
+	ret
+;
+;
+;
+
